@@ -1,6 +1,6 @@
 ---
 simd: '0558'
-title: Current Leader Sysvar
+title: Current Leader Syscall
 authors:
   - cavey
   - frank
@@ -14,10 +14,9 @@ development:
 
 ## Summary
 
-Create a new sysvar that tracks the current leader for the current epoch.
+Create a new syscall that returns the leader for the current & the next slot.
 
-Sysvar pubkey:
-`SysvarCurrentLeader111111111111111111111111`
+`fn sol_get_leader(result: *mut u8) -> u64`
 
 ## Motivation
 
@@ -32,7 +31,7 @@ No new terminology is introduced by this proposal.
 
 ## Detailed Design
 
-### Sysvar Account
+### Returned Value
 
 ```rust
 #[repr(C)]
@@ -49,6 +48,8 @@ pub struct CurrentLeader {
 }
 ```
 
+The `CurrentLeader` struct is written to the `result` formal by the syscall.
+
 The `slot`, `epoch_start_timestamp`, `epoch`, `leader_schedule_epoch`, and
 `unix_timestamp` values stored here must be equivalent to the corresponding
 values stored on the `Clock`. The `leader_identity` and `leader_vote` fields
@@ -57,9 +58,9 @@ current slot. The `next_leader_identity` and `next_leader_vote` fields must be
 the block producer's identity pubkey and vote account pubkey for slot
 `slot + 1`.
 
-### Updating
+### Updating Values
 
-The fields which the Current Leader sysvar shares with the `Clock` must be
+The fields which the Current Leader object shares with the `Clock` must be
 updated in lockstep with the `Clock`. Notably, post-Alpenglow, the
 `unix_timestamp` field must be updated via
 `BlockComponentProcessor::update_bank_from_footer_fields` (in Agave) to prevent
@@ -71,8 +72,9 @@ fields is immediately after the `Clock` is updated.
 
 ### Program Access
 
-No new syscall is introduced. Programs may access the Current Leader sysvar via
-the `sol_get_sysvar` syscall or by passing in the `AccountInfo` explicitly.
+Programs may access the `CurrentLeader` information via the `sol_get_leader` syscall.
+
+No sysvar is introduced.
 
 ### Mismatches
 
@@ -112,13 +114,13 @@ accounts may correspond to the same identity.
 
 ## Impact
 
-Programs such as market makers may now use this sysvar to better update quotes
+Programs such as market makers may now use this syscall to better update quotes
 based on specific and undesirable leader characteristics. This will further
 improve the robustness of Solana's market-making environment.
 
 Programs will need to be recompiled and redeployed to adopt this feature.
 
-Similar to the `Clock`, programs relying on this sysvar may exhibit different
+Similar to the `Clock`, programs relying on this syscall may exhibit different
 behavior if simulated and executed at different slots.
 
 ## Security Considerations
@@ -127,7 +129,7 @@ None
 
 ## Backwards Compatibility
 
-Programs accessing this sysvar could not be used on Solana versions which do
-not implement it. Existing programs that do not use this sysvar are not
+Programs accessing this syscall could not be used on Solana versions which do
+not implement it. Existing programs that do not use this syscall are not
 impacted. Therefore, a feature gate should be used to enable this feature when
 the majority of the cluster is using the required version.
