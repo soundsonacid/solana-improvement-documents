@@ -1,6 +1,6 @@
 ---
 simd: '0558'
-title: Current Leader Syscall
+title: Leader Info Syscall
 authors:
   - cavey
   - frank
@@ -35,12 +35,7 @@ No new terminology is introduced by this proposal.
 
 ```rust
 #[repr(C)]
-pub struct CurrentLeader {
-    pub slot: Slot,
-    pub epoch_start_timestamp: UnixTimestamp,
-    pub epoch: Epoch,
-    pub leader_schedule_epoch: Epoch,
-    pub unix_timestamp: UnixTimestamp,
+pub struct LeaderInfo {
     pub leader_identity: Pubkey,
     pub leader_vote: Pubkey,
     pub next_leader_identity: Pubkey,
@@ -48,43 +43,30 @@ pub struct CurrentLeader {
 }
 ```
 
-The `CurrentLeader` struct is written to the `result` formal by the syscall.
+The `LeaderInfo` struct is written to the `result` formal by the syscall.
 
-The `slot`, `epoch_start_timestamp`, `epoch`, `leader_schedule_epoch`, and
-`unix_timestamp` values stored here must be equivalent to the corresponding
-values stored on the `Clock`. The `leader_identity` and `leader_vote` fields
+The `leader_identity` and `leader_vote` fields
 must be the block producer's identity pubkey and vote account pubkey for the
 current slot. The `next_leader_identity` and `next_leader_vote` fields must be
 the block producer's identity pubkey and vote account pubkey for slot
 `slot + 1`.
 
-### Updating Values
-
-The fields which the Current Leader object shares with the `Clock` must be
-updated in lockstep with the `Clock`. Notably, post-Alpenglow, the
-`unix_timestamp` field must be updated via
-`BlockComponentProcessor::update_bank_from_footer_fields` (in Agave) to prevent
-conflicting `unix_timestamp` values.
-
-The other fields in the Current Leader sysvar must be updated prior to
-transaction execution for a given slot. A prudent location to update these
-fields is immediately after the `Clock` is updated.
-
 ### Program Access
 
-Programs may access the `CurrentLeader` information via the `sol_get_leader` syscall.
+Programs may access the `LeaderInfo` information via the `sol_get_leader` syscall.
 
 No sysvar is introduced.
 
-### Mismatches
+### CU Cost
 
-Under TowerBFT, a validator which misimplements this sysvar and produces a block
-that has incorrect execution results or an incorrect bankhash will throw a BHM
-and crash. The remainder of the cluster will accept the correctly-executed
-block and proceed as normal.
+This syscall copies data into a caller-provided memory address similar to the
+sysvar-specific getter syscalls (`SolGetClockSysvar`,
+`SolGetLastRestartSlotSysvar`, etc.).
 
-In Alpenglow, the produced block will still BHM, but Alpenglow marks BHM as a
-cluster-wide dead slot.
+We suggest pricing this syscall in line with the cost model used by those
+syscalls (`100 + size_of::<T>() as u64`).
+
+Under this model, `sol_get_leader` would cost `100 + 32 * 4 = 228 CU`.
 
 ### Leader & Vote Pubkeys
 
@@ -99,8 +81,6 @@ accounts may correspond to the same identity.
 - Add fields to the current `Clock`. This was rejected as many programs assert
   invariants like `clock.data().len() == 40`, so adding fields would break these
   programs.
-- Only include leader identities. This was rejected as forcing the caller to
-  also fetch the `Clock` to get the `(slot, leader)` pair is inefficient.
 - Only include the current leader. We opted to include both current and next
   because knowledge of the next leader enables programs to compensate for, for
   example, the next leader having a history of outright censorship. A program
